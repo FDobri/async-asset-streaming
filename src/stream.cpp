@@ -29,4 +29,26 @@ std::uint64_t read(std::istream& in) {
 }
 }
 
+void pack(const std::filesystem::path& path, std::span<const Bytes> blobs) {
+    if (blobs.empty() || blobs.size() > entry_limit) throw std::invalid_argument("invalid pack entry count");
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) throw std::runtime_error("cannot create pack");
+    out.write(signature.data(), signature.size());
+    write(out, blobs.size());
+    for (std::size_t i = 0; i < blobs.size() * 3; ++i) write(out, 0);
+    std::vector<Entry> index;
+    Bytes buffer;
+    for (const auto& blob : blobs) {
+        if (blob.empty() || blob.size() > byte_limit) throw std::invalid_argument("invalid asset size");
+        buffer.resize(ZSTD_compressBound(blob.size()));
+        const auto compressed = ZSTD_compress(buffer.data(), buffer.size(), blob.data(), blob.size(), 3);
+        if (ZSTD_isError(compressed)) throw std::runtime_error(ZSTD_getErrorName(compressed));
+        index.push_back({static_cast<std::uint64_t>(out.tellp()), blob.size(), compressed});
+        out.write(reinterpret_cast<const char*>(buffer.data()), compressed);
+    }
+    out.seekp(12);
+    for (const auto& e : index) { write(out, e.offset); write(out, e.size); write(out, e.compressed); }
+    out.close();
+    if (!out) throw std::runtime_error("could not write pack");
+}
 }
