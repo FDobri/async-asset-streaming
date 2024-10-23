@@ -51,4 +51,20 @@ void pack(const std::filesystem::path& path, std::span<const Bytes> blobs) {
     out.close();
     if (!out) throw std::runtime_error("could not write pack");
 }
+void make_tiles(const std::filesystem::path& path, std::size_t count) {
+    if (!count || count > 512) throw std::invalid_argument("tile count must be 1–512");
+    std::vector<Bytes> tiles(count, Bytes(tile_bytes));
+    for (std::size_t id = 0; id < count; ++id)
+        for (std::size_t y = 0; y < tile_edge; ++y)
+            for (std::size_t x = 0; x < tile_edge; ++x) {
+                auto* pixel = &tiles[id][(y * tile_edge + x) * 3];
+                const auto grain = (x * x + y * x + id * 13) % 37;
+                const auto contour = ((x + y + id * 5) / 14) % 2;
+                pixel[0] = static_cast<std::uint8_t>(35 + id * 19 % 140 + grain);
+                pixel[1] = static_cast<std::uint8_t>(50 + id * 7 % 120 + grain + contour * 25);
+                pixel[2] = static_cast<std::uint8_t>(65 + id * 23 % 110 + grain);
+            }
+    pack(path, tiles);
+}
+
 }
