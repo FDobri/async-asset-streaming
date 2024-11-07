@@ -67,4 +67,52 @@ void make_tiles(const std::filesystem::path& path, std::size_t count) {
     pack(path, tiles);
 }
 
+struct Loader::State {
+    struct Request { int priority; std::uint64_t ticket; };
+    struct Cached { std::shared_ptr<const Bytes> data; std::uint64_t access; };
+    explicit State(const std::filesystem::path& path, std::size_t budget)
+        : input(path, std::ios::binary), budget(budget) {
+        std::array<char, 4> marker{};
+        if (!input.read(marker.data(), marker.size()) || marker != signature)
+            throw std::runtime_error("invalid pack signature");
+        const auto length = std::filesystem::file_size(path);
+        const auto count = read(input);
+        if (!count || count > entry_limit || 12 + count * 24 > length)
+            throw std::runtime_error("invalid pack entry count");
+        auto minimum = 12 + count * 24;
+        for (std::size_t i = 0; i < count; ++i) {
+            Entry e{read(input), read(input), read(input)};
+            if (!e.size || e.size > byte_limit || e.offset < minimum || e.offset > length ||
+                !e.compressed || e.compressed > length - e.offset ||
+                e.compressed > ZSTD_compressBound(e.size))
+                throw std::runtime_error("invalid pack entry");
+            minimum = e.offset + e.compressed;
+            entries.push_back(e);
+        }
+        if (!budget) throw std::invalid_argument("budget must be positive");
+        worker = std::thread([this] { run(); });
+    }
+    ~State() {
+        { std::lock_guard guard(mutex); stopping = true; }
+        wake.notify_all();
+        worker.join();
+    }
+    std::ifstream input;
+    std::vector<Entry> entries;
+    const std::size_t budget;
+    mutable std::mutex mutex;
+    std::condition_variable wake;
+    std::unordered_map<std::size_t, Request> pending;
+    std::unordered_map<std::size_t, Cached> cache;
+    std::unordered_map<std::size_t, bool> failed;
+    std::thread worker;
+    std::uint64_t counter{};
+    std::size_t loading = entry_limit, resident_bytes{}, reserved{}, failures{};
+    bool stopping{};
+};
+
+Loader::Loader(const std::filesystem::path& path, std::size_t budget)
+    : state_(std::make_unique<State>(path, budget)) {}
+Loader::~Loader() = default;
+std::size_t Loader::count() const noexcept { return state_->entries.size(); }
 }
