@@ -109,6 +109,20 @@ struct Loader::State {
     std::uint64_t counter{};
     std::size_t loading = entry_limit, resident_bytes{}, reserved{}, failures{};
     bool stopping{};
+
+    bool admit(std::size_t bytes) {
+        while (bytes > budget - resident_bytes) {
+            auto victim = cache.end();
+            for (auto it = cache.begin(); it != cache.end(); ++it)
+                if (it->second.data.use_count() == 1 &&
+                    (victim == cache.end() || it->second.access < victim->second.access))
+                    victim = it;
+            if (victim == cache.end()) return false;
+            resident_bytes -= victim->second.data->size();
+            cache.erase(victim);
+        }
+        return true;
+    }
 };
 
 Loader::Loader(const std::filesystem::path& path, std::size_t budget)
