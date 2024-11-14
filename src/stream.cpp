@@ -123,6 +123,18 @@ struct Loader::State {
         }
         return true;
     }
+    std::shared_ptr<const Bytes> load(Entry e) {
+#ifdef STREAM_TRACY
+        ZoneScopedN("Read and decompress asset");
+#endif
+        Bytes compressed(static_cast<std::size_t>(e.compressed));
+        auto output = std::make_shared<Bytes>(static_cast<std::size_t>(e.size));
+        input.clear();
+        input.seekg(static_cast<std::streamoff>(e.offset));
+        if (!input.read(reinterpret_cast<char*>(compressed.data()), compressed.size())) return {};
+        auto decoded = ZSTD_decompress(output->data(), output->size(), compressed.data(), compressed.size());
+        return decoded == output->size() ? output : nullptr;
+    }
 };
 
 Loader::Loader(const std::filesystem::path& path, std::size_t budget)
