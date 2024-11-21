@@ -135,6 +135,41 @@ struct Loader::State {
         auto decoded = ZSTD_decompress(output->data(), output->size(), compressed.data(), compressed.size());
         return decoded == output->size() ? output : nullptr;
     }
+    void run() {
+        std::unique_lock lock(mutex);
+        while (!stopping) {
+            if (pending.empty()) {
+                wake.wait(lock, [&] { return stopping || !pending.empty(); });
+                continue;
+            }
+            const auto best = std::max_element(pending.begin(), pending.end(), [](const auto& a, const auto& b) {
+                if (a.second.priority != b.second.priority) return a.second.priority < b.second.priority;
+                return a.second.ticket > b.second.ticket;
+            });
+            const auto id = best->first;
+            const auto ticket = best->second.ticket;
+            const Entry e = entries[id];
+            if (!admit(static_cast<std::size_t>(e.size))) {
+                // Views can be released without a call into the loader.
+                wake.wait_for(lock, std::chrono::milliseconds(5));
+                continue;
+            }
+            loading = id;
+            reserved = static_cast<std::size_t>(e.size);
+            lock.unlock();
+            std::shared_ptr<const Bytes> output;
+            try { output = load(e); } catch (const std::bad_alloc&) {}
+            lock.lock();
+            loading = entry_limit;
+            reserved = 0;
+            const auto current = pending.find(id);
+            if (current == pending.end() || current->second.ticket != ticket) continue;
+            pending.erase(current);
+            if (!output) { failed[id] = true; ++failures; continue; }
+            cache.emplace(id, Cached{std::move(output), ++counter});
+            resident_bytes += static_cast<std::size_t>(e.size);
+        }
+    }
 };
 
 Loader::Loader(const std::filesystem::path& path, std::size_t budget)
