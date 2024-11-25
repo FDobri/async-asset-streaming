@@ -176,4 +176,37 @@ Loader::Loader(const std::filesystem::path& path, std::size_t budget)
     : state_(std::make_unique<State>(path, budget)) {}
 Loader::~Loader() = default;
 std::size_t Loader::count() const noexcept { return state_->entries.size(); }
+void Loader::request(std::size_t id, int priority) {
+    auto& s = *state_;
+    if (id >= count()) throw std::out_of_range("invalid asset ID");
+    if (s.entries[id].size > s.budget) throw std::invalid_argument("asset exceeds budget");
+    {
+        std::lock_guard guard(s.mutex);
+        if (s.failed.contains(id)) return;
+        if (auto cached = s.cache.find(id); cached != s.cache.end()) {
+            cached->second.access = ++s.counter;
+            return;
+        }
+        auto [it, inserted] = s.pending.try_emplace(id, State::Request{priority, ++s.counter});
+        if (!inserted) it->second.priority = priority;
+    }
+    s.wake.notify_one();
+}
+void Loader::cancel(std::size_t id) {
+    { std::lock_guard guard(state_->mutex); state_->pending.erase(id); }
+    state_->wake.notify_one();
+}
+std::shared_ptr<const Bytes> Loader::view(std::size_t id) {
+    auto& s = *state_;
+    std::lock_guard guard(s.mutex);
+    auto it = s.cache.find(id);
+    if (it == s.cache.end()) return {};
+    it->second.access = ++s.counter;
+    return it->second.data;
+}
+Stats Loader::stats() const {
+    auto& s = *state_;
+    std::lock_guard guard(s.mutex);
+    return {s.resident_bytes + s.reserved, s.budget, s.pending.size(), s.cache.size(), s.failures};
+}
 }
