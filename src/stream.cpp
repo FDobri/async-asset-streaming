@@ -9,6 +9,9 @@
 #include <stdexcept>
 #include <thread>
 #include <unordered_map>
+#ifdef STREAM_TRACY
+#include <tracy/Tracy.hpp>
+#endif
 
 namespace asset {
 namespace {
