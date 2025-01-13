@@ -11,3 +11,9 @@ ctest --test-dir build -C Release --output-on-failure
 ./build/asset_pack sample.pack --tiles 64
 ./build/stream_scene sample.pack
 ```
+
+Use the Release subdirectory for multi-config builds. The demo requires desktop OpenGL 2.1 compatibility. Configure with `-DSTREAM_DEMO=OFF` for a headless packer and loader or `-DSTREAM_TRACY=ON` to capture read/decompression zones with Tracy 0.11.1.
+
+Use the camera slider or arrow keys, or let auto-scroll move the camera. The overlay shows the decoded CPU budget, GPU texture payload, request status and frame time. `stream_scene sample.pack --smoke` exits after uploading a tile. The packer also accepts a list of ordinary files, using their argument positions as asset IDs.
+
+## Data and scheduling
