@@ -17,3 +17,5 @@ Use the Release subdirectory for multi-config builds. The demo requires desktop 
 Use the camera slider or arrow keys, or let auto-scroll move the camera. The overlay shows the decoded CPU budget, GPU texture payload, request status and frame time. `stream_scene sample.pack --smoke` exits after uploading a tile. The packer also accepts a list of ordinary files, using their argument positions as asset IDs.
 
 ## Data and scheduling
+
+The little-endian pack begins with an ASP1 marker, an entry count and fixed-size offset/length records. A worker reads only the selected compressed entry and publishes an immutable decoded buffer. Priority sorts first and request age breaks ties. Requests can be reprioritized. Cancellation discards an obsolete in-flight result even when Zstandard has already started decompression.
