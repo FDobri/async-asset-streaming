@@ -21,3 +21,5 @@ Use the camera slider or arrow keys, or let auto-scroll move the camera. The ove
 The little-endian pack begins with an ASP1 marker, an entry count and fixed-size offset/length records. A worker reads only the selected compressed entry and publishes an immutable decoded buffer. Priority sorts first and request age breaks ties. Requests can be reprioritized. Cancellation discards an obsolete in-flight result even when Zstandard has already started decompression.
 
 The decoded budget includes cache-owned buffers, pinned views and an in-flight reservation. A shared view pins an object until all callers release it. The worker evicts the least recently used unpinned buffer to fulfill the next request. Temporary compressed bytes, directory data and GPU resources are measured separately from the decoded budget. The test fills a four-byte cache, pins its only block, cancels a pending load and verifies eviction and recovery.
+
+For a repeatable frame comparison, use the 64-tile pack, Release, the same window size, budget and camera path, then capture the same interval with Tracy. Record CPU, GPU, driver and vsync settings with the observed frame times.
