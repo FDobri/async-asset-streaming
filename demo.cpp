@@ -7,7 +7,7 @@
 #include <backends/imgui_impl_opengl2.h>
 #include <algorithm>
 #include <array>
-#include <chrono>
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -15,9 +15,24 @@
 #include <string_view>
 
 int main(int argc, char** argv) try {
-    if (argc < 2) throw std::runtime_error("usage: stream_scene PACK [--smoke]");
-    const bool smoke = argc == 3 && std::string_view(argv[2]) == "--smoke";
-    asset::Loader loader(argv[1], asset::tile_bytes * 10);
+    if (argc < 2) throw std::runtime_error("usage: stream_scene PACK [--budget-kib N] [--smoke]");
+    bool smoke = false;
+    std::size_t budget_kib = 480;
+    for (int i = 2; i < argc; ++i) {
+        const std::string_view flag(argv[i]);
+        if (flag == "--smoke") {
+            smoke = true;
+        } else if (flag == "--budget-kib" && i + 1 < argc) {
+            const std::string_view text(argv[++i]);
+            auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), budget_kib);
+            if (error != std::errc{} || end != text.data() + text.size() ||
+                budget_kib < asset::tile_bytes / 1024 || budget_kib > 65536)
+                throw std::invalid_argument("budget must be between 48 and 65536 KiB");
+        } else {
+            throw std::invalid_argument("usage: stream_scene PACK [--budget-kib N] [--smoke]");
+        }
+    }
+    asset::Loader loader(argv[1], budget_kib * 1024);
     if (!SDL_Init(SDL_INIT_VIDEO)) throw std::runtime_error(SDL_GetError());
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
